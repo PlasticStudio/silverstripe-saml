@@ -53,6 +53,8 @@ class SAMLLoginForm extends LoginForm
             $backURL = $this->getRequest()->requestVar('BackURL');
         }
         if ($this->shouldShowLogoutFields()) {
+            //todo confirm if this is required (it's used in LoginForm)
+            $logoutAction = Security::logout_url();
             $fields = FieldList::create([
                 HiddenField::create('AuthenticationMethod', null, $this->authenticator_class, $this)
             ]);
@@ -74,6 +76,10 @@ class SAMLLoginForm extends LoginForm
         $this->setFormMethod('POST', true);
 
         parent::__construct($controller, $name, $fields, $actions);
+        //todo confirm if this is required (it's used in LoginForm)
+        if (isset($logoutAction)) {
+            $this->setFormAction($logoutAction);
+        }
     }
 
     protected function getFormFields()

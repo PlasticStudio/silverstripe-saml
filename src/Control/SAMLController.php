@@ -15,6 +15,7 @@ use SilverStripe\SAML\Authenticators\SAMLAuthenticator;
 use SilverStripe\SAML\Authenticators\SAMLLoginForm;
 use SilverStripe\SAML\Helpers\SAMLHelper;
 use SilverStripe\Control\Controller;
+use SilverStripe\Core\Convert;
 use SilverStripe\Control\Director;
 use SilverStripe\Control\HTTPResponse;
 use SilverStripe\Core\Injector\Injector;
@@ -22,6 +23,7 @@ use SilverStripe\SAML\Model\SAMLResponse;
 use SilverStripe\SAML\Services\SAMLConfiguration;
 use SilverStripe\Security\IdentityStore;
 use SilverStripe\Security\Member;
+use SilverStripe\Security\Group;
 use SilverStripe\Security\Security;
 use function uniqid;
 
@@ -192,6 +194,33 @@ class SAMLController extends Controller
             $member->$field = $attributes[$claim][0];
         }
 
+
+        //todo don't hardcode this
+        $claimgroups = $attributes['http://schemas.microsoft.com/ws/2008/06/identity/claims/groups'];
+        //Removing all groups
+        $member->Groups()->removeAll();
+        //do we want to consider custom edits allowed(in CMS) with some sort of flag, so we don't always purge groups? 
+        if($claimgroups){
+            foreach ($claimgroups as $claimgroup){
+                //hardcoded agreed prefix coming from AD groups
+                //todo make this prefix editable
+                $title = str_replace("SEC-WEB-", "", $claimgroup);
+                $group = Group::get()->filter(array('Title' => $title))->First();
+     
+                if (!($group && $group->exists())){
+                    //create group with no permisisons, permissions to be added by admins
+                    $group = Group::create();
+                    $group->Title = $title;
+                    $group->Code = Convert::raw2url($title);
+                    $group->write();
+                } 
+
+                // Add member to group instead of adding group to member
+                // This bypasses the privilege escallation code in Member_GroupSet
+                $group->DirectMembers()->add($member);
+            }
+        }
+
         $member->SAMLSessionIndex = $auth->getSessionIndex();
 
         // This will trigger LDAP update through LDAPMemberExtension::memberLoggedIn, if the LDAP module is installed.
@@ -199,6 +228,9 @@ class SAMLController extends Controller
         // IdentityStore->logIn() is called, otherwise the identity store throws an exception.
         // Both SAML and LDAP identify Members by the same GUID field.
         $member->write();
+        
+        //todo maybe add $this->extend('updateMember', $member);
+
 
         /** @var IdentityStore $identityStore */
         $identityStore = Injector::inst()->get(IdentityStore::class);
